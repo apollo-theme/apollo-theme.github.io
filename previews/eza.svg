@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+<title id="title">Apollo for eza — simulated preview</title>
+<desc id="desc">A clearly labeled simulated eza interface using the Apollo color palette.</desc>
+<style>.canvas{fill:#141617}.frame,.panel{fill:#141617;stroke:#3c3836;stroke-width:1}.raised,.toolbar{fill:#1d2021;stroke:#3c3836;stroke-width:1}.body,.bright,.dim,.label,.accent,.success,.info,.line-number,.canvas-text,.stamp,.title-small{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.body{fill:#cfbc97;font-size:18px}.bright{fill:#fbf1c7;font-size:18px}.dim{fill:#d5c4a1;font-size:16px}.label{fill:#d5c4a1;font-size:14px;font-weight:700;letter-spacing:1.5px}.stamp{fill:#141617;font-size:13px;font-weight:700;letter-spacing:1.5px}.accent{fill:#fabd2f;font-size:18px}.success{fill:#b8bb26;font-size:18px}.info{fill:#83a598;font-size:18px}.line-number{fill:#928374;font-size:15px}.canvas-text{fill:#141617;font-size:15px;font-weight:700}.title-small{fill:#fbf1c7;font-size:24px;font-weight:700}.rule{stroke:#3c3836;stroke-width:1}.signal{stroke:#928374;stroke-width:2}.node{fill:#928374}.live,.focus{fill:#fabd2f}.info-box{fill:#83a598}.success-box{fill:#b8bb26}.status{fill:#fabd2f}.selected{fill:#3c3836;stroke:#928374;stroke-width:1}.swatch-canvas{fill:#141617;stroke:#3c3836}.swatch-surface{fill:#1d2021;stroke:#3c3836}</style>
+<rect width="1200" height="630" class="canvas"/>
+<rect x="40" y="40" width="1120" height="550" class="frame"/>
+<rect x="40" y="40" width="1120" height="64" fill="#1d2021"/>
+<rect x="914" y="57" width="214" height="30" fill="#fabd2f"/>
+<text x="72" y="80" class="label" text-anchor="start">APOLLO / UTILITY</text>
+<text x="1021" y="78" class="stamp" text-anchor="middle">SIMULATED PREVIEW</text>
+<g class="layout layout-file-table"><rect x="70" y="142" width="1060" height="366" class="panel"/><rect x="70" y="142" width="1060" height="45" class="raised"/><text x="94" y="172" class="label" text-anchor="start">eza --long --git --group-directories-first</text><text x="98" y="226" class="dim" text-anchor="start">MODE   SIZE  GIT  NAME</text><line x1="96" y1="244" x2="1104" y2="244" class="rule"/><text x="98" y="294" class="bright" text-anchor="start">drwx  544B  --  assets/</text><text x="98" y="346" class="info" text-anchor="start">drwx  2.1k  --  palette/</text><text x="98" y="398" class="body" text-anchor="start">drwx   18k   N  previews/</text><text x="98" y="450" class="success" text-anchor="start">-rw-   42k   M  index.html</text><rect x="70" y="484" width="1060" height="24" class="status"/><text x="88" y="502" class="canvas-text" text-anchor="start">6 entries · sorted directories first</text></g>
+<line x1="70" y1="548" x2="1130" y2="548" class="rule"/>
+<text x="70" y="578" class="bright" text-anchor="start">eza</text>
+<text x="1130" y="578" class="dim" text-anchor="end">File metadata aligned for a fast visual scan.</text>
+</svg>
