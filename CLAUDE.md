@@ -6,15 +6,15 @@ This repository is the no-build organization-root GitHub Pages site for Apollo T
 
 ## Source of truth
 
-- `palette/apollo.json` must remain byte-for-byte identical to the parent canonical palette.
+- `palette/apollo.json` and `palette/apollo-light.json` must remain byte-for-byte identical to the parent canonical palettes.
 - `scripts/generate.py` owns `index.html` and every `previews/*.svg` file.
 - Run the generator after changing site content or preview data. Never hand-edit generated files.
-- Keep exactly the 17 permanent `app-*` anchors and matching preview SVGs.
+- Keep the 17 permanent `app-<slug>` compatibility anchors, nested dark/light anchors, and exactly 34 matching SVGs. Existing `previews/<slug>.svg` files remain the stable dark URLs; light companions use `previews/<slug>-light.svg`.
 - Every visual presented as an app interface must remain visibly labeled `SIMULATED PREVIEW`.
 
 ## Design constraints
 
-Preserve the Apollo night-flight console: one dark instrument surface, square rails, exact palette values, local/system monospace, and the palette-to-app signal path. Do not introduce gradients, purple, glass effects, rounded-everything, or decorative metrics. `#665c54` is ANSI bright black only and must never be normal interface text.
+Preserve the Apollo flight console: square rails, exact palette values, local/system monospace, and the palette-to-app signal path. The site shell follows `prefers-color-scheme`, but every app’s Apollo and Apollo Light figures remain visible without JavaScript. Do not introduce gradients, purple, glass effects, rounded-everything, or decorative metrics. In Apollo dark, `#665c54` is ANSI bright black only and must never be normal interface text; Apollo Light defines it as a contrast-safe inactive-text role.
 
 ## Verification
 

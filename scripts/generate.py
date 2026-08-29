@@ -4,7 +4,7 @@ import argparse
 import difflib
 import html
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import quote
 import json
@@ -70,16 +70,18 @@ def rows(x: int, y: int, values: tuple[str, ...], step: int = 45) -> str:
     return "".join(txt(x, y + index * step, value, classes[min(index, 4)]) for index, value in enumerate(values))
 
 
-def render_scene(app: App) -> str:
+def render_scene(app: App, appearance: str = "dark") -> str:
     parts: list[str] = []
+    variant_name = "Apollo Light" if appearance == "light" else "Apollo"
+    variant_label = "APOLLO LIGHT" if appearance == "light" else "APOLLO"
     if app.layout == "flight-console":
         parts += [box(70, 142, 740, 366), box(830, 142, 300, 366, "raised"), line(70, 190, 810, 190), txt(94, 174, "MISSION SHELL", "label"), rows(104, 234, app.lines, 50), txt(854, 174, "SIGNAL", "label"), line(854, 220, 1104, 220, "signal"), '<circle cx="854" cy="220" r="6" class="node"/><circle cx="979" cy="220" r="6" class="node"/><circle cx="1104" cy="220" r="6" class="live"/>', txt(854, 275, "FOCUS", "dim"), box(1030, 255, 60, 25, "focus"), txt(854, 325, "INFO", "dim"), box(1030, 305, 60, 25, "info-box"), txt(854, 375, "SUCCESS", "dim"), box(1030, 355, 60, 25, "success-box"), txt(854, 435, "CURSOR", "dim"), txt(1090, 435, "READY", "success", "end")]
     elif app.layout == "split-shell":
         parts += [box(70, 142, 1060, 366), box(70, 142, 1060, 45, "raised"), box(86, 151, 250, 36, "selected"), txt(106, 176, app.name, "bright"), txt(362, 176, "server", "dim"), line(620, 187, 620, 508), txt(94, 224, "LOCAL", "label"), rows(104, 270, app.lines[:3]), txt(646, 224, "PROFILE / CONFIG", "label"), rows(656, 270, app.lines[3:]), box(70, 484, 1060, 24, "status"), txt(88, 502, "apollo/theme · pane 1 of 2", "canvas-text")]
     elif app.layout in {"native-shell", "tabbed-shell"}:
-        parts += [box(70, 142, 1060, 366), box(70, 142, 1060, 45, "raised"), txt(92, 172, f"{app.name} — Apollo", "dim"), rows(104, 236, app.lines, 53), box(850, 210, 250, 180, "raised"), txt(874, 242, "PROFILE", "label"), txt(874, 286, "Text", "dim"), txt(1074, 286, "Apollo", "body", "end"), txt(874, 330, "Cursor", "dim"), box(1044, 310, 30, 24, "focus"), txt(874, 374, "Status", "dim"), txt(1074, 374, "READY", "success", "end")]
+        parts += [box(70, 142, 1060, 366), box(70, 142, 1060, 45, "raised"), txt(92, 172, f"{app.name} — {variant_name}", "dim"), rows(104, 236, app.lines, 53), box(850, 210, 250, 180, "raised"), txt(874, 242, "PROFILE", "label"), txt(874, 286, "Text", "dim"), txt(1074, 286, variant_name, "body", "end"), txt(874, 330, "Cursor", "dim"), box(1044, 310, 30, 24, "focus"), txt(874, 374, "Status", "dim"), txt(1074, 374, "READY", "success", "end")]
     elif app.layout == "browser-chrome":
-        parts += [box(70, 142, 1060, 366), box(70, 142, 1060, 76, "raised"), box(92, 152, 224, 28, "selected"), txt(106, 172, "Apollo Theme", "bright"), txt(102, 204, "‹  ›  ↻", "dim"), box(190, 185, 760, 24, "selected"), txt(208, 204, app.lines[0], "body"), box(70, 218, 224, 290, "raised"), txt(96, 254, "FIREFOX", "label"), txt(96, 303, app.lines[1], "body"), txt(96, 350, app.lines[2], "bright"), txt(324, 266, "APOLLO / NIGHT FLIGHT", "title-small"), txt(324, 304, app.tagline, "dim"), box(324, 342, 160, 110, "swatch-canvas"), box(500, 342, 160, 110, "swatch-surface"), box(676, 342, 160, 110, "focus"), box(852, 342, 160, 110, "info-box"), box(852, 468, 160, 30, "focus"), txt(932, 489, app.lines[3], "canvas-text", "middle")]
+        parts += [box(70, 142, 1060, 366), box(70, 142, 1060, 76, "raised"), box(92, 152, 224, 28, "selected"), txt(106, 172, "Apollo Theme", "bright"), txt(102, 204, "‹  ›  ↻", "dim"), box(190, 185, 760, 24, "selected"), txt(208, 204, app.lines[0], "body"), box(70, 218, 224, 290, "raised"), txt(96, 254, "FIREFOX", "label"), txt(96, 303, app.lines[1], "body"), txt(96, 350, app.lines[2], "bright"), txt(324, 266, f"{variant_label} / {'DAY FLIGHT' if appearance == 'light' else 'NIGHT FLIGHT'}", "title-small"), txt(324, 304, app.tagline, "dim"), box(324, 342, 160, 110, "swatch-canvas"), box(500, 342, 160, 110, "swatch-surface"), box(676, 342, 160, 110, "focus"), box(852, 342, 160, 110, "info-box"), box(852, 468, 160, 30, "focus"), txt(932, 489, app.lines[3], "canvas-text", "middle")]
     elif app.layout in {"code-workbench", "ide-inspector"}:
         parts += [box(70, 142, 1060, 366), box(70, 142, 1060, 42, "raised"), txt(92, 170, "File  Edit  View  Git  Run  Terminal", "dim"), box(70, 184, 236, 300, "raised"), txt(94, 218, "EXPLORER", "label"), txt(94, 262, "▾ APOLLO", "body"), txt(114, 304, "▾ source", "dim"), txt(134, 346, "theme", "bright"), txt(114, 388, "palette.json", "dim"), txt(94, 448, "OUTLINE", "label"), box(306, 184, 824, 300), txt(332, 218, f"{app.name} / theme source", "label"), rows(342, 268, app.lines, 48), box(70, 484, 1060, 24, "status"), txt(88, 502, "main*", "canvas-text"), txt(1112, 502, "UTF-8 · Ln 14", "canvas-text", "end")]
     elif app.layout == "modal-source":
@@ -97,9 +99,43 @@ def render_scene(app: App) -> str:
     return "".join(parts)
 
 
-def render_preview(app: App, palette: dict) -> str:
-    scene = render_scene(app)
+def replace_all(value: str, replacements: tuple[tuple[str, str], ...]) -> str:
+    for old, new in replacements:
+        value = value.replace(old, new)
+    return value
+
+
+def app_for_appearance(app: App, palette: dict, appearance: str) -> App:
+    if appearance != "light":
+        return app
     colors = palette["colors"]
+    replacements = (
+        ("background=dark", "background=light"),
+        ("IsDark => true", "IsDark => false"),
+        ("#141617", colors["background"]),
+        ("#cfbc97", colors["foreground"]),
+        ("#fabd2f", colors["accent"]),
+        ("0x141617", f'0x{colors["background"][1:]}'),
+        ("0xfabd2f", f'0x{colors["accent"][1:]}'),
+        ("load_palette()", "load_light_palette()"),
+        ("Apollo", "Apollo Light"),
+        ("apollo", "apollo-light"),
+        ("APOLLO", "APOLLO LIGHT"),
+        ("night", "day"),
+        ("17 / 17", "34 / 34"),
+        ("17 previews", "34 previews"),
+    )
+    lines = tuple(replace_all(line, replacements) for line in app.lines)
+    tagline = app.tagline.replace("night", "day")
+    return replace(app, lines=lines, tagline=tagline)
+
+
+def render_preview(app: App, palette: dict, appearance: str = "dark") -> str:
+    displayed_app = app_for_appearance(app, palette, appearance)
+    scene = render_scene(displayed_app, appearance)
+    colors = palette["colors"]
+    variant_name = "Apollo Light" if appearance == "light" else "Apollo"
+    variant_label = "APOLLO LIGHT" if appearance == "light" else "APOLLO"
     styles = (
         f'.canvas{{fill:{colors["background"]}}}.frame,.panel{{fill:{colors["background"]};stroke:{colors["selection"]};stroke-width:1}}'
         f'.raised,.toolbar{{fill:{colors["surface"]};stroke:{colors["selection"]};stroke-width:1}}'
@@ -117,19 +153,19 @@ def render_preview(app: App, palette: dict) -> str:
     )
     chunks = [
         '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">',
-        f'<title id="title">Apollo for {esc(app.name)} — simulated preview</title>',
-        f'<desc id="desc">A clearly labeled simulated {esc(app.name)} interface using the Apollo color palette.</desc>',
+        f'<title id="title">{variant_name} for {esc(app.name)} — simulated preview</title>',
+        f'<desc id="desc">A clearly labeled simulated {esc(app.name)} interface using the {variant_name} color palette.</desc>',
         f'<style>{styles}</style>',
         '<rect width="1200" height="630" class="canvas"/>',
         '<rect x="40" y="40" width="1120" height="550" class="frame"/>',
         f'<rect x="40" y="40" width="1120" height="64" fill="{colors["surface"]}"/>',
         f'<rect x="914" y="57" width="214" height="30" fill="{colors["accent"]}"/>',
-        txt(72, 80, f"APOLLO / {app.family.upper()}", "label"),
+        txt(72, 80, f"{variant_label} / {app.family.upper()}", "label"),
         txt(1021, 78, "SIMULATED PREVIEW", "stamp", "middle"),
         f'<g class="layout layout-{esc(app.layout)}">{scene}</g>',
         '<line x1="70" y1="548" x2="1130" y2="548" class="rule"/>',
         txt(70, 578, app.name, "bright"),
-        txt(1130, 578, app.tagline, "dim", "end"),
+        txt(1130, 578, displayed_app.tagline, "dim", "end"),
         '</svg>',
     ]
     return "\n".join(chunks) + "\n"
@@ -142,15 +178,25 @@ def palette_cell(name: str, value: str, restricted: bool = False) -> str:
 
 def render_app_section(app: App, index: int) -> str:
     repo = app.repo
-    preview = f"previews/{app.slug}.svg"
     return f'''<section class="app-port" id="app-{app.slug}" aria-labelledby="title-{app.slug}">
 <div class="port-copy"><p class="port-index">PORT {index:02d} / 17 · {esc(app.family.upper())}</p><h2 id="title-{app.slug}">{esc(app.name)}</h2><p>{esc(app.tagline)}</p><nav class="port-links" aria-label="{esc(app.name)} links"><a href="{repo}">Repository</a><a href="{repo}#readme">Install / README</a><a href="{repo}/releases/latest">Latest release</a></nav></div>
-<figure class="preview"><img src="{preview}" alt="Simulated {esc(app.name)} interface using Apollo colors" width="1200" height="630" loading="lazy" decoding="async"><figcaption>SIMULATED PREVIEW · illustrative interface, not an application screenshot.</figcaption></figure>
+<div class="appearance-pair">
+<figure class="preview preview-dark" id="app-{app.slug}-dark"><a class="preview-link" href="#app-{app.slug}-dark" aria-label="Link to {esc(app.name)} Apollo appearance"><img src="previews/{app.slug}.svg" alt="Simulated {esc(app.name)} interface using Apollo colors" width="1200" height="630" loading="lazy" decoding="async"></a><figcaption><span class="appearance-label">Apollo</span><span>SIMULATED PREVIEW · illustrative interface, not an application screenshot.</span></figcaption></figure>
+<figure class="preview preview-light" id="app-{app.slug}-light"><a class="preview-link" href="#app-{app.slug}-light" aria-label="Link to {esc(app.name)} Apollo Light appearance"><img src="previews/{app.slug}-light.svg" alt="Simulated {esc(app.name)} interface using Apollo Light colors" width="1200" height="630" loading="lazy" decoding="async"></a><figcaption><span class="appearance-label">Apollo Light</span><span>SIMULATED PREVIEW · illustrative interface, not an application screenshot.</span></figcaption></figure>
+</div>
 </section>'''
 
 
+def load_palette_file(filename: str) -> dict:
+    return json.loads((ROOT / "palette" / filename).read_text(encoding="utf-8"))
+
+
 def load_palette() -> dict:
-    return json.loads((ROOT / "palette" / "apollo.json").read_text(encoding="utf-8"))
+    return load_palette_file("apollo.json")
+
+
+def load_light_palette() -> dict:
+    return load_palette_file("apollo-light.json")
 
 
 def palette_tables(palette: dict) -> tuple[tuple[tuple[str, str], ...], ...]:
@@ -170,10 +216,25 @@ def palette_tables(palette: dict) -> tuple[tuple[tuple[str, str], ...], ...]:
     return base, ansi, bright
 
 
+def render_palette_article(palette_id: str, filename: str, palette: dict) -> str:
+    base, ansi, bright = palette_tables(palette)
+    restricted = set(palette["constraints"]["restrictedColors"])
+    base_cells = "".join(palette_cell(name, value, value in restricted) for name, value in base)
+    ansi_cells = "".join(palette_cell(name, value, value in restricted) for name, value in ansi)
+    bright_cells = "".join(palette_cell(name, value, value in restricted) for name, value in bright)
+    return f'''<article class="palette-table" id="{palette_id}" aria-labelledby="{palette_id}-title">
+<div class="palette-table-heading"><p class="appearance-kicker">{esc(palette["appearance"])} appearance</p><h3 id="{palette_id}-title">{esc(palette["name"])}</h3><a href="palette/{filename}">Open canonical JSON</a></div>
+<div class="palette-group"><h4>Base palette</h4><ul class="palette-strip base-strip">{base_cells}</ul></div>
+<div class="palette-group"><h4>ANSI</h4><ul class="palette-strip">{ansi_cells}</ul></div>
+<div class="palette-group"><h4>Bright</h4><ul class="palette-strip">{bright_cells}</ul></div>
+</article>'''
+
+
 def render_index() -> str:
     palette = load_palette()
+    light_palette = load_light_palette()
     colors = palette["colors"]
-    base, ansi, bright = palette_tables(palette)
+    light_colors = light_palette["colors"]
     favicon = quote(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
         f'<rect width="64" height="64" fill="{colors["background"]}"/>'
@@ -181,28 +242,34 @@ def render_index() -> str:
         '</svg>',
         safe="",
     )
-    base_cells = "".join(palette_cell(name, value) for name, value in base)
-    ansi_cells = "".join(palette_cell(name, value) for name, value in ansi)
-    bright_cells = "".join(palette_cell(name, value, name == "Bright black") for name, value in bright)
+    palette_articles = "".join((
+        render_palette_article("palette-dark", "apollo.json", palette),
+        render_palette_article("palette-light", "apollo-light.json", light_palette),
+    ))
     ports = "".join(render_app_section(app, index) for index, app in enumerate(APPS, 1))
     app_nav = "".join(f'<a href="#app-{app.slug}">{esc(app.name)}</a>' for app in APPS)
     return f'''<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><meta name="theme-color" content="{colors["background"]}"><meta name="description" content="Apollo is a high-contrast dark theme carried from one canonical palette into terminals, editors, browsers, and shell tools."><title>Apollo Theme</title><link rel="icon" href="data:image/svg+xml,{favicon}"><link rel="stylesheet" href="assets/site.css"></head>
-<body><a class="skip-link" href="#main">Skip to main content</a><header class="site-header"><a class="wordmark" href="#top" aria-label="Apollo Theme home"><span aria-hidden="true">A/</span> APOLLO</a><nav aria-label="Primary"><a href="#palette">Palette</a><a href="#ports">17 ports</a><a href="https://github.com/apollo-theme/apollo-theme">Source</a></nav></header>
-<main id="main"><section class="hero" id="top" aria-labelledby="hero-title"><p class="eyebrow">NIGHT-FLIGHT COLOR SYSTEM · DARK / HARD / HIGH-CONTRAST</p><h1 id="hero-title">One palette.<br>Every instrument.</h1><p class="thesis">Apollo carries a near-black Gruvbox lineage across the interfaces where work happens—without losing state, syntax, or focus on the way.</p><div class="hero-actions"><a class="primary-action" href="#palette">Read the signal</a><a href="https://github.com/apollo-theme/apollo-theme">Canonical source</a></div></section>
-<section class="signal-path" aria-label="Apollo signal path"><div class="signal-line"><span class="signal-node live"></span><span class="signal-node"></span><span class="signal-node"></span><span class="signal-node"></span></div><ol><li><strong>01 / SOURCE</strong><span>apollo.json</span></li><li><strong>02 / MAP</strong><span>semantic roles</span></li><li><strong>03 / PORT</strong><span>17 repositories</span></li><li><strong>04 / RUN</strong><span>your interfaces</span></li></ol></section>
-<section class="palette-section" id="palette" aria-labelledby="palette-title"><div class="section-heading"><p class="eyebrow">SOURCE OF TRUTH / SCHEMA 1</p><h2 id="palette-title">Color telemetry</h2><p>The values below are read from the canonical <a href="palette/apollo.json">Apollo palette</a>. Bright black is reserved for ANSI output and never carries body text.</p></div><div class="palette-group"><h3>Base palette</h3><ul class="palette-strip base-strip">{base_cells}</ul></div><div class="palette-group"><h3>ANSI</h3><ul class="palette-strip">{ansi_cells}</ul></div><div class="palette-group"><h3>Bright</h3><ul class="palette-strip">{bright_cells}</ul></div></section>
-<section class="ports" id="ports" aria-labelledby="ports-title"><div class="section-heading"><p class="eyebrow">PORT MANIFEST / 17 PERMANENT TARGETS</p><h2 id="ports-title">The same signal, tuned to each cockpit.</h2><p>Every view below is an explicit simulation, built to show how Apollo’s roles behave in that interface family.</p></div><nav class="port-jump" aria-label="App sections">{app_nav}</nav>{ports}</section>
-<section class="source-section" aria-labelledby="source-title"><p class="eyebrow">OPEN SYSTEM / MIT</p><h2 id="source-title">Inspect the source before you fly.</h2><p>Every port traces back to <a href="https://github.com/apollo-theme/apollo-theme">the canonical repository</a>, the exact <a href="palette/apollo.json">palette JSON</a>, and an <a href="LICENSE" rel="license">MIT license</a>.</p></section>
-<section class="credits" aria-labelledby="credits-title"><p class="eyebrow">LINEAGE / THANKS</p><h2 id="credits-title">Built on a well-lit lineage.</h2><p>Thank you to <a href="https://github.com/morhetz/gruvbox">Gruvbox</a> for the color language and <a href="https://github.com/D0n9X1n/SonicTerm">SonicTerm</a> for the near-black flight deck that became Apollo’s starting point.</p></section></main>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><meta name="theme-color" content="{colors["background"]}" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="{light_colors["background"]}" media="(prefers-color-scheme: light)"><meta name="description" content="Apollo and Apollo Light carry accessible Gruvbox palettes into 17 terminals, editors, browsers, and shell tools."><title>Apollo Theme</title><link rel="icon" href="data:image/svg+xml,{favicon}"><link rel="stylesheet" href="assets/site.css"></head>
+<body><a class="skip-link" href="#main">Skip to main content</a><header class="site-header"><a class="wordmark" href="#top" aria-label="Apollo Theme home"><span aria-hidden="true">A/</span> APOLLO</a><nav aria-label="Primary"><a href="#palette">Palettes</a><a href="#ports">17 ports</a><a href="https://github.com/apollo-theme/apollo-theme">Source</a></nav></header>
+<main id="main" tabindex="-1"><section class="hero" id="top" aria-labelledby="hero-title"><p class="eyebrow">GRUVBOX COLOR SYSTEM · DARK + LIGHT · HIGH-CONTRAST</p><h1 id="hero-title">Two skies.<br>Every instrument.</h1><p class="thesis">Apollo and Apollo Light carry one semantic signal across the interfaces where work happens—without losing state, syntax, or focus between night and day.</p><div class="hero-actions"><a class="primary-action" href="#palette">Read both signals</a><a href="https://github.com/apollo-theme/apollo-theme">Canonical source</a></div></section>
+<section class="signal-path" aria-label="Apollo signal path"><div class="signal-line"><span class="signal-node live"></span><span class="signal-node"></span><span class="signal-node"></span><span class="signal-node"></span></div><ol><li><strong>01 / SOURCE</strong><span>two palettes</span></li><li><strong>02 / MAP</strong><span>semantic roles</span></li><li><strong>03 / PORT</strong><span>17 repositories</span></li><li><strong>04 / RUN</strong><span>dark + light</span></li></ol></section>
+<section class="palette-section" id="palette" aria-labelledby="palette-title"><div class="section-heading"><p class="eyebrow">TWO SOURCES OF TRUTH / SCHEMA 1</p><h2 id="palette-title">Color telemetry</h2><p>Compare the canonical <a href="#palette-dark">Apollo</a> and <a href="#palette-light">Apollo Light</a> tables. Restricted ANSI colors never carry body text.</p></div><div class="palette-pair">{palette_articles}</div></section>
+<section class="ports" id="ports" aria-labelledby="ports-title"><div class="section-heading"><p class="eyebrow">PORT MANIFEST / 17 PERMANENT TARGETS / 34 VIEWS</p><h2 id="ports-title">The same signal, tuned to both skies.</h2><p>Every app shows Apollo and Apollo Light side by side as explicit simulations. Neither appearance is hidden by your operating-system preference.</p></div><nav class="port-jump" aria-label="App sections">{app_nav}</nav>{ports}</section>
+<section class="source-section" aria-labelledby="source-title"><p class="eyebrow">OPEN SYSTEM / MIT</p><h2 id="source-title">Inspect the source before you fly.</h2><p>Every port traces back to <a href="https://github.com/apollo-theme/apollo-theme">the canonical repository</a>, the exact <a href="palette/apollo.json">Apollo JSON</a> and <a href="palette/apollo-light.json">Apollo Light JSON</a>, plus an <a href="LICENSE" rel="license">MIT license</a>.</p></section>
+<section class="credits" aria-labelledby="credits-title"><p class="eyebrow">LINEAGE / THANKS</p><h2 id="credits-title">Built on a well-lit lineage.</h2><p>Thank you to <a href="https://github.com/morhetz/gruvbox">Gruvbox</a> for both color languages and <a href="https://github.com/D0n9X1n/SonicTerm">SonicTerm</a> for the near-black flight deck that became Apollo’s dark starting point.</p></section></main>
 <footer><span>APOLLO THEME · 2026</span><a href="#top">Return to top</a></footer></body></html>
 '''
 
 
 def generated_files() -> dict[Path, str]:
-    palette = load_palette()
+    dark_palette = load_palette()
+    light_palette = load_light_palette()
     files = {ROOT / "index.html": render_index()}
-    files.update({ROOT / "previews" / f"{app.slug}.svg": render_preview(app, palette) for app in APPS})
+    files.update({ROOT / "previews" / f"{app.slug}.svg": render_preview(app, dark_palette) for app in APPS})
+    files.update({
+        ROOT / "previews" / f"{app.slug}-light.svg": render_preview(app, light_palette, "light")
+        for app in APPS
+    })
     return files
 
 

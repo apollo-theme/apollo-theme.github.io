@@ -13,7 +13,10 @@ from pathlib import Path
 from urllib.parse import unquote_to_bytes, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_HASH = "550f8c36cf4ef6ac99551541d1fe9554f77d563fa1e7c129a6a82583321d61ef"
+EXPECTED_HASHES = {
+    "apollo.json": "550f8c36cf4ef6ac99551541d1fe9554f77d563fa1e7c129a6a82583321d61ef",
+    "apollo-light.json": "b0dbdeb719ed1931c424e9590562689325ecac1609e2fed6406ec5c4d3dc5763",
+}
 EXPECTED_SLUGS = (
     "sonicterm", "wezterm", "iterm2", "apple-terminal", "alacritty",
     "windows-terminal", "firefox", "vscode", "visual-studio", "vim",
@@ -53,26 +56,42 @@ def contrast(first: str, second: str) -> float:
     return (high + 0.05) / (low + 0.05)
 
 
+def load_palettes() -> dict[str, dict]:
+    return {
+        filename: json.loads((ROOT / "palette" / filename).read_text(encoding="utf-8"))
+        for filename in EXPECTED_HASHES
+    }
+
+
 def check_palette() -> None:
-    raw = (ROOT / "palette" / "apollo.json").read_bytes()
-    digest = hashlib.sha256(raw).hexdigest()
-    if digest != EXPECTED_HASH:
-        fail(f"palette hash mismatch: {digest}")
-    data = json.loads(raw)
-    if len(data["terminal"]["ansi"]) != 8 or len(data["terminal"]["bright"]) != 8:
-        fail("palette must contain complete ANSI and bright tables")
-    colors = data["colors"]
-    canvas = colors["background"]
-    for role in ("foreground", "foregroundSecondary", "foregroundInactive", "accent", "danger", "success", "info", "magenta", "cyan"):
-        ratio = contrast(colors[role], canvas)
-        if ratio < 4.5:
-            fail(f"{role} contrast is {ratio:.2f}, below 4.5:1")
-    if contrast(colors["ansiBrightBlack"], canvas) >= 4.5:
-        fail("restricted bright black unexpectedly qualifies as body text")
-    signal_ratio = contrast(colors["foregroundSecondary"], colors["surface"])
-    if signal_ratio < 4.5:
-        fail(f"signal-path text contrast is {signal_ratio:.2f}, below 4.5:1")
-    print(f"palette: exact sha256 {digest}; body contrasts >= 4.5:1")
+    for filename, expected_hash in EXPECTED_HASHES.items():
+        raw = (ROOT / "palette" / filename).read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest != expected_hash:
+            fail(f"{filename} hash mismatch: {digest}")
+        data = json.loads(raw)
+        if len(data["terminal"]["ansi"]) != 8 or len(data["terminal"]["bright"]) != 8:
+            fail(f"{filename} must contain complete ANSI and bright tables")
+        colors = data["colors"]
+        canvas = colors["background"]
+        for role in ("foreground", "foregroundSecondary", "foregroundInactive", "accent", "danger", "success", "info", "magenta", "cyan"):
+            ratio = contrast(colors[role], canvas)
+            if ratio < 4.5:
+                fail(f"{filename} {role} contrast is {ratio:.2f}, below 4.5:1")
+        for role, surface_role in (
+            ("foregroundSecondary", "surface"),
+            ("foreground", "selection"),
+            ("background", "accent"),
+            ("background", "danger"),
+            ("background", "success"),
+            ("background", "info"),
+        ):
+            ratio = contrast(colors[role], colors[surface_role])
+            if ratio < 4.5:
+                fail(f"{filename} {role}/{surface_role} contrast is {ratio:.2f}, below 4.5:1")
+        if colors["ansiBrightBlack"] in data["constraints"]["restrictedColors"] and contrast(colors["ansiBrightBlack"], canvas) >= 4.5:
+            fail(f"{filename} restricted bright black unexpectedly qualifies as body text")
+        print(f"palette: {filename} exact sha256 {digest}; checked contrast pairs >= 4.5:1")
 
 
 def decode_favicon(href: str) -> ET.Element:
@@ -97,9 +116,16 @@ def check_html() -> None:
     if duplicates:
         fail(f"duplicate IDs: {duplicates}")
     app_ids = [value for value in parser.ids if value.startswith("app-")]
-    expected_ids = [f"app-{slug}" for slug in EXPECTED_SLUGS]
+    expected_ids = [
+        app_id
+        for slug in EXPECTED_SLUGS
+        for app_id in (f"app-{slug}", f"app-{slug}-dark", f"app-{slug}-light")
+    ]
     if app_ids != expected_ids:
         fail(f"app IDs differ: {app_ids}")
+    for palette_id in ("palette-dark", "palette-light"):
+        if parser.ids.count(palette_id) != 1:
+            fail(f"expected one {palette_id} anchor")
     known_ids = set(parser.ids)
     for link in parser.links:
         parsed = urlparse(link)
@@ -109,14 +135,19 @@ def check_html() -> None:
             fail(f"protocol-relative link: {link}")
         if link.startswith("#") and link[1:] not in known_ids:
             fail(f"broken fragment: {link}")
-    if len(parser.images) != 17:
-        fail(f"expected 17 preview images, found {len(parser.images)}")
-    for slug, image in zip(EXPECTED_SLUGS, parser.images, strict=True):
-        if not image.get("alt") or not image.get("width") or not image.get("height"):
-            fail(f"preview lacks alt or dimensions: {image}")
-        source = str(image.get("src", ""))
-        if source != f"previews/{slug}.svg":
-            fail(f"preview must use previews/{slug}.svg, got {source}")
+    expected_sources = [
+        source
+        for slug in EXPECTED_SLUGS
+        for source in (f"previews/{slug}.svg", f"previews/{slug}-light.svg")
+    ]
+    if len(parser.images) != 34:
+        fail(f"expected 34 preview images, found {len(parser.images)}")
+    for source, image in zip(expected_sources, parser.images, strict=True):
+        if not image.get("alt") or image.get("width") != "1200" or image.get("height") != "630":
+            fail(f"preview lacks alt or exact dimensions: {image}")
+        found = str(image.get("src", ""))
+        if found != source:
+            fail(f"preview source order differs: expected {source}, got {found}")
     if re.search(r"<(script|iframe)\b", text, re.I):
         fail("site must not require scripts or iframes")
     favicon = re.search(r'<link rel="icon" href="([^"]+)">', text)
@@ -134,17 +165,27 @@ def check_html() -> None:
 
 def check_svgs() -> None:
     files = sorted((ROOT / "previews").glob("*.svg"))
-    if [path.stem for path in files] != sorted(EXPECTED_SLUGS):
-        fail("preview SVG set differs from permanent app inventory")
-    colors = json.loads((ROOT / "palette" / "apollo.json").read_text(encoding="utf-8"))["colors"]
-    required_styles = (
-        f'.raised,.toolbar{{fill:{colors["surface"]};',
-        f'.dim{{fill:{colors["foregroundSecondary"]};',
+    expected_names = sorted(
+        name
+        for slug in EXPECTED_SLUGS
+        for name in (f"{slug}.svg", f"{slug}-light.svg")
     )
-    if contrast(colors["foregroundSecondary"], colors["surface"]) < 4.5:
-        fail("preview dim text does not meet 4.5:1 on raised panels")
+    if [path.name for path in files] != expected_names:
+        fail("preview SVG set differs from the exact 34-file app inventory")
+    palettes = load_palettes()
     layouts: set[str] = set()
     for path in files:
+        appearance = "light" if path.stem.endswith("-light") else "dark"
+        filename = "apollo-light.json" if appearance == "light" else "apollo.json"
+        colors = palettes[filename]["colors"]
+        required_styles = (
+            f'.canvas{{fill:{colors["background"]}}}',
+            f'.raised,.toolbar{{fill:{colors["surface"]};',
+            f'.body{{fill:{colors["foreground"]};',
+            f'.dim{{fill:{colors["foregroundSecondary"]};',
+            f'.line-number{{fill:{colors["foregroundInactive"]};',
+            f'.live,.focus{{fill:{colors["accent"]}}}',
+        )
         text = path.read_text(encoding="utf-8")
         if 'width="1200" height="630"' not in text:
             fail(f"wrong social dimensions: {path.name}")
@@ -161,9 +202,11 @@ def check_svgs() -> None:
         layouts.add(match.group(1))
         if 'data-layout=' in text:
             fail(f"invalid SVG data-layout attribute: {path.name}")
+        if appearance == "light" and "Apollo Light" not in text:
+            fail(f"light preview lacks variant identity: {path.name}")
     if len(layouts) < 8:
         fail(f"previews need at least 8 meaningful layouts, found {len(layouts)}")
-    print(f"svg: 17 safe simulations across {len(layouts)} layouts")
+    print(f"svg: 34 safe simulations across {len(layouts)} layouts with exact variant styles")
 
 
 def check_generated() -> None:

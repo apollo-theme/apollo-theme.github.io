@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 import unittest
 import xml.etree.ElementTree as ET
 import sys
@@ -11,6 +12,7 @@ from urllib.parse import unquote_to_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_SHA256 = "550f8c36cf4ef6ac99551541d1fe9554f77d563fa1e7c129a6a82583321d61ef"
+EXPECTED_LIGHT_SHA256 = "b0dbdeb719ed1931c424e9590562689325ecac1609e2fed6406ec5c4d3dc5763"
 
 
 class PaletteContractTests(unittest.TestCase):
@@ -19,6 +21,13 @@ class PaletteContractTests(unittest.TestCase):
         self.assertTrue(site_palette.is_file(), "palette/apollo.json must exist")
         self.assertEqual(
             hashlib.sha256(site_palette.read_bytes()).hexdigest(), EXPECTED_SHA256
+        )
+
+    def test_site_light_palette_matches_pinned_canonical_hash(self) -> None:
+        site_palette = ROOT / "palette" / "apollo-light.json"
+        self.assertTrue(site_palette.is_file(), "palette/apollo-light.json must exist")
+        self.assertEqual(
+            hashlib.sha256(site_palette.read_bytes()).hexdigest(), EXPECTED_LIGHT_SHA256
         )
 
     def test_palette_exposes_complete_terminal_tables(self) -> None:
@@ -81,31 +90,77 @@ EXPECTED_SLUGS = [
 class GeneratedSiteTests(unittest.TestCase):
     def test_generated_site_has_exact_permanent_app_inventory(self) -> None:
         html = (ROOT / "index.html").read_text(encoding="utf-8")
-        ids = [f'id="app-{slug}"' for slug in EXPECTED_SLUGS]
-        self.assertEqual(sum(html.count(app_id) for app_id in ids), 17)
+        legacy_ids = [f'id="app-{slug}"' for slug in EXPECTED_SLUGS]
+        self.assertEqual(sum(html.count(app_id) for app_id in legacy_ids), 17)
         self.assertFalse(any(
             f'id="app-{slug}"' not in html for slug in EXPECTED_SLUGS
         ))
-        self.assertEqual(
-            sorted(path.stem for path in (ROOT / "previews").glob("*.svg")),
-            sorted(EXPECTED_SLUGS),
+        expected_previews = sorted(
+            name
+            for slug in EXPECTED_SLUGS
+            for name in (f"{slug}.svg", f"{slug}-light.svg")
         )
+        self.assertEqual(
+            sorted(path.name for path in (ROOT / "previews").glob("*.svg")),
+            expected_previews,
+        )
+
+    def test_each_app_exposes_visible_dark_and_light_appearances(self) -> None:
+        html = (ROOT / "index.html").read_text(encoding="utf-8")
+        for slug in EXPECTED_SLUGS:
+            self.assertIn(f'id="app-{slug}-dark"', html)
+            self.assertIn(f'id="app-{slug}-light"', html)
+            self.assertIn(f'src="previews/{slug}.svg"', html)
+            self.assertIn(f'src="previews/{slug}-light.svg"', html)
+        self.assertEqual(html.count(">Apollo</span>"), 17)
+        self.assertEqual(html.count(">Apollo Light</span>"), 17)
 
     def test_previews_are_safe_social_graphics_with_varied_layouts(self) -> None:
         layouts: set[str] = set()
         for slug in EXPECTED_SLUGS:
-            svg = (ROOT / "previews" / f"{slug}.svg").read_text(encoding="utf-8")
-            self.assertIn('width="1200" height="630"', svg)
-            self.assertIn("SIMULATED PREVIEW", svg)
-            self.assertIn("<style>", svg)
-            self.assertNotIn("<script", svg.lower())
-            self.assertNotIn('href="http://', svg)
-            self.assertNotIn("<image", svg.lower())
-            marker = re.search(r'<g class="layout layout-([a-z-]+)">', svg)
-            self.assertIsNotNone(marker)
-            assert marker is not None
-            layouts.add(marker.group(1))
+            for suffix in ("", "-light"):
+                svg = (ROOT / "previews" / f"{slug}{suffix}.svg").read_text(encoding="utf-8")
+                self.assertIn('width="1200" height="630"', svg)
+                self.assertIn("SIMULATED PREVIEW", svg)
+                self.assertIn("<style>", svg)
+                self.assertNotIn("<script", svg.lower())
+                self.assertNotIn('href="http://', svg)
+                self.assertNotIn("<image", svg.lower())
+                marker = re.search(r'<g class="layout layout-([a-z-]+)">', svg)
+                self.assertIsNotNone(marker)
+                assert marker is not None
+                layouts.add(marker.group(1))
         self.assertGreaterEqual(len(layouts), 8)
+
+    def test_light_preview_scene_text_matches_light_appearance(self) -> None:
+        light_visual_studio = (ROOT / "previews" / "visual-studio-light.svg").read_text()
+        light_vscode = (ROOT / "previews" / "vscode-light.svg").read_text()
+        light_vim = (ROOT / "previews" / "vim-light.svg").read_text()
+        light_nvim = (ROOT / "previews" / "nvim-light.svg").read_text()
+        light_xcode = (ROOT / "previews" / "xcode-light.svg").read_text()
+        self.assertIn("public bool IsDark =&gt; false;", light_visual_studio)
+        self.assertIn("palette = load_light_palette()", light_vscode)
+        self.assertIn("set background=light", light_vim)
+        self.assertIn("hi Normal guifg=#3c3836", light_vim)
+        self.assertIn("g:colors_name = &#x27;apollo-light&#x27;", light_vim)
+        self.assertIn("M.canvas = &#x27;#f9f5d7&#x27;", light_nvim)
+        self.assertIn("static let canvas = 0xf9f5d7", light_xcode)
+        self.assertIn("static let focus = 0x8a5200", light_xcode)
+        self.assertNotIn("background=dark", light_vim)
+        self.assertNotIn("IsDark =&gt; true", light_visual_studio)
+        self.assertNotIn("#141617", light_nvim)
+        self.assertNotIn("0x141617", light_xcode)
+        self.assertNotIn("0xfabd2f", light_xcode)
+
+    def test_legacy_dark_previews_match_committed_bytes(self) -> None:
+        for slug in EXPECTED_SLUGS:
+            committed = subprocess.run(
+                ["git", "show", f"HEAD:previews/{slug}.svg"],
+                cwd=ROOT,
+                check=True,
+                capture_output=True,
+            ).stdout
+            self.assertEqual((ROOT / "previews" / f"{slug}.svg").read_bytes(), committed)
 
     def test_preview_styles_use_canonical_palette_roles(self) -> None:
         import importlib.util
@@ -114,26 +169,31 @@ class GeneratedSiteTests(unittest.TestCase):
         sys.modules[spec.name] = module
         assert spec.loader is not None
         spec.loader.exec_module(module)
-        palette = module.load_palette()
-        colors = palette["colors"]
-        svg = module.render_preview(module.APPS[0], palette)
-        style = svg.split("<style>", 1)[1].split("</style>", 1)[0]
-        expected_fills = {
-            "body": colors["foreground"],
-            "bright": colors["foregroundBright"],
-            "dim": colors["foregroundSecondary"],
-            "label": colors["foregroundSecondary"],
-            "accent": colors["accent"],
-            "success": colors["success"],
-            "info": colors["info"],
-            "line-number": colors["foregroundInactive"],
-            "canvas-text": colors["background"],
-            "stamp": colors["background"],
-            "title-small": colors["foregroundBright"],
-        }
-        for selector, color in expected_fills.items():
-            self.assertRegex(style, rf'\.{re.escape(selector)}\{{fill:{re.escape(color)}[;}}]')
-        self.assertNotRegex(style, r'\.dim\{fill:#928374[;}]')
+        for palette, appearance in (
+            (module.load_palette(), "dark"),
+            (module.load_light_palette(), "light"),
+        ):
+            colors = palette["colors"]
+            svg = module.render_preview(module.APPS[0], palette, appearance)
+            style = svg.split("<style>", 1)[1].split("</style>", 1)[0]
+            expected_fills = {
+                "canvas": colors["background"],
+                "body": colors["foreground"],
+                "bright": colors["foregroundBright"],
+                "dim": colors["foregroundSecondary"],
+                "label": colors["foregroundSecondary"],
+                "accent": colors["accent"],
+                "success": colors["success"],
+                "info": colors["info"],
+                "line-number": colors["foregroundInactive"],
+                "canvas-text": colors["background"],
+                "stamp": colors["background"],
+                "title-small": colors["foregroundBright"],
+            }
+            for selector, color in expected_fills.items():
+                self.assertRegex(style, rf'\.{re.escape(selector)}\{{fill:{re.escape(color)}[;}}]')
+        dark_style = (ROOT / "previews" / "sonicterm.svg").read_text().split("<style>", 1)[1].split("</style>", 1)[0]
+        self.assertNotRegex(dark_style, r'\.dim\{fill:#928374[;}]')
 
 
     def test_site_contains_required_content_links_and_accessibility_hooks(self) -> None:
@@ -149,6 +209,7 @@ class GeneratedSiteTests(unittest.TestCase):
             )
         self.assertIn('href="#main"', html)
         self.assertIn('class="skip-link"', html)
+        self.assertIn('<main id="main" tabindex="-1">', html)
         self.assertIn('aria-label="Primary"', html)
         self.assertIn('href="palette/apollo.json"', html)
         self.assertIn('href="LICENSE"', html)
@@ -173,22 +234,51 @@ class GeneratedSiteTests(unittest.TestCase):
         self.assertNotIn("analytics", html.lower())
         self.assertNotIn("<script", html.lower())
 
-    def test_site_shows_complete_palette_tables(self) -> None:
+    def test_site_shows_complete_dark_and_light_palette_tables(self) -> None:
         html = (ROOT / "index.html").read_text(encoding="utf-8")
-        palette = json.loads((ROOT / "palette" / "apollo.json").read_text())
-        required = [
-            palette["colors"][key]
-            for key in (
-                "background", "surface", "foreground", "foregroundSecondary",
-                "foregroundInactive", "accent", "selection", "danger", "success",
-                "info", "magenta", "cyan",
-            )
-        ] + palette["terminal"]["ansi"] + palette["terminal"]["bright"]
-        for color in required:
-            self.assertIn(color, html)
-        self.assertIn("Base palette", html)
-        self.assertIn("ANSI", html)
-        self.assertIn("Bright", html)
+        for palette_id, filename in (
+            ("palette-dark", "apollo.json"),
+            ("palette-light", "apollo-light.json"),
+        ):
+            self.assertEqual(html.count(f'id="{palette_id}"'), 1)
+            palette = json.loads((ROOT / "palette" / filename).read_text())
+            section = html.split(f'id="{palette_id}"', 1)[1].split('</article>', 1)[0]
+            required = [
+                palette["colors"][key]
+                for key in (
+                    "background", "surface", "foreground", "foregroundSecondary",
+                    "foregroundInactive", "accent", "selection", "danger", "success",
+                    "info", "magenta", "cyan",
+                )
+            ] + palette["terminal"]["ansi"] + palette["terminal"]["bright"]
+            for color in required:
+                self.assertIn(color, section)
+            self.assertIn("Base palette", section)
+            self.assertIn("ANSI", section)
+            self.assertIn("Bright", section)
+        self.assertIn('href="palette/apollo.json"', html)
+        self.assertIn('href="palette/apollo-light.json"', html)
+
+    def test_shell_follows_os_appearance_without_hiding_previews(self) -> None:
+        html = (ROOT / "index.html").read_text(encoding="utf-8")
+        css = (ROOT / "assets" / "site.css").read_text(encoding="utf-8")
+        self.assertIn('<meta name="color-scheme" content="dark light">', html)
+        self.assertIn(
+            '<meta name="theme-color" content="#141617" media="(prefers-color-scheme: dark)">',
+            html,
+        )
+        self.assertIn(
+            '<meta name="theme-color" content="#f9f5d7" media="(prefers-color-scheme: light)">',
+            html,
+        )
+        self.assertIn("color-scheme:darklight", css.replace(" ", ""))
+        self.assertIn("@media (prefers-color-scheme: light)", css)
+        for variable in (
+            "--canvas", "--surface", "--selection", "--text-primary",
+            "--text-secondary", "--text-inactive", "--text-bright", "--accent",
+        ):
+            self.assertIn(variable, css)
+        self.assertNotRegex(css, r"\.preview-(?:dark|light)\s*\{[^}]*display\s*:\s*none")
 
 
     def test_css_encodes_responsive_accessible_instrument_surface(self) -> None:
@@ -199,11 +289,13 @@ class GeneratedSiteTests(unittest.TestCase):
         self.assertIn("min-height:44px", css.replace(" ", ""))
         self.assertIn("@media (prefers-reduced-motion: reduce)", css)
         self.assertIn("@media (max-width: 767px)", css)
-        self.assertIn("overflow-x:hidden", css)
+        compact = re.sub(r"\s+", "", css)
+        self.assertIn("overflow-x:hidden", compact)
         self.assertNotIn("linear-gradient", css)
         self.assertNotIn("radial-gradient", css)
         self.assertNotIn("backdrop-filter", css)
-        self.assertNotIn("#665c54", css)
+        dark_root = css.split("@media (prefers-color-scheme: light)", 1)[0]
+        self.assertNotIn("#665c54", dark_root)
 
 
 
@@ -215,7 +307,7 @@ class RepositoryContractTests(unittest.TestCase):
     def test_required_repository_files_and_pinned_ci_exist(self) -> None:
         required = (
             ".nojekyll", "LICENSE", "CLAUDE.md", "README.md", "index.html",
-            "assets/site.css", "palette/apollo.json", "scripts/generate.py",
+            "assets/site.css", "palette/apollo.json", "palette/apollo-light.json", "scripts/generate.py",
             "scripts/check.py", ".github/workflows/pages.yml",
         )
         for relative in required:
