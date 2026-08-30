@@ -3,10 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import subprocess
 import unittest
 import xml.etree.ElementTree as ET
 import sys
+from html import unescape
 from pathlib import Path
 from urllib.parse import unquote_to_bytes
 
@@ -80,11 +80,26 @@ class PaletteContractTests(unittest.TestCase):
         )
 
 
-EXPECTED_SLUGS = [
-    "sonicterm", "wezterm", "iterm2", "apple-terminal", "alacritty",
-    "windows-terminal", "firefox", "vscode", "visual-studio", "vim",
-    "nvim", "xcode", "tmux", "rmux", "powershell", "bat", "eza",
+EXPECTED_APPS = [
+    ("sonicterm", "SonicTerm", "terminal"),
+    ("wezterm", "WezTerm", "terminal"),
+    ("iterm2", "iTerm2", "terminal"),
+    ("apple-terminal", "Apple Terminal", "terminal"),
+    ("alacritty", "Alacritty", "terminal"),
+    ("windows-terminal", "Windows Terminal", "terminal"),
+    ("firefox", "Firefox", "browser"),
+    ("vscode", "VS Code", "editor"),
+    ("visual-studio", "Visual Studio", "editor"),
+    ("vim", "Vim", "editor"),
+    ("nvim", "Neovim", "editor"),
+    ("xcode", "Xcode", "editor"),
+    ("tmux", "tmux", "multiplexer"),
+    ("rmux", "RMUX", "multiplexer"),
+    ("powershell", "PowerShell", "shell"),
+    ("bat", "bat", "utility"),
+    ("eza", "eza", "utility"),
 ]
+EXPECTED_SLUGS = [slug for slug, _, _ in EXPECTED_APPS]
 
 
 class GeneratedSiteTests(unittest.TestCase):
@@ -105,15 +120,32 @@ class GeneratedSiteTests(unittest.TestCase):
             expected_previews,
         )
 
-    def test_each_app_exposes_visible_dark_and_light_appearances(self) -> None:
+    def test_each_app_exposes_visible_apollo_dark_and_light_appearances(self) -> None:
         html = (ROOT / "index.html").read_text(encoding="utf-8")
-        for slug in EXPECTED_SLUGS:
+        for slug, name, _ in EXPECTED_APPS:
             self.assertIn(f'id="app-{slug}-dark"', html)
             self.assertIn(f'id="app-{slug}-light"', html)
             self.assertIn(f'src="previews/{slug}.svg"', html)
             self.assertIn(f'src="previews/{slug}-light.svg"', html)
-        self.assertEqual(html.count(">Apollo</span>"), 17)
+            self.assertIn(f'aria-label="Link to {name} Apollo Dark appearance"', html)
+            self.assertIn(f'alt="Simulated {name} interface using Apollo Dark colors"', html)
+            self.assertIn(f'aria-label="Link to {name} Apollo Light appearance"', html)
+            self.assertIn(f'alt="Simulated {name} interface using Apollo Light colors"', html)
+        self.assertEqual(
+            html.count(
+                "SIMULATED PREVIEW · illustrative Apollo Dark interface, not an application screenshot."
+            ),
+            17,
+        )
+        self.assertEqual(
+            html.count(
+                "SIMULATED PREVIEW · illustrative Apollo Light interface, not an application screenshot."
+            ),
+            17,
+        )
+        self.assertEqual(html.count(">Apollo Dark</span>"), 17)
         self.assertEqual(html.count(">Apollo Light</span>"), 17)
+        self.assertIn("Apollo Dark and Apollo Light", html)
 
     def test_previews_are_safe_social_graphics_with_varied_layouts(self) -> None:
         layouts: set[str] = set()
@@ -152,15 +184,244 @@ class GeneratedSiteTests(unittest.TestCase):
         self.assertNotIn("0x141617", light_xcode)
         self.assertNotIn("0xfabd2f", light_xcode)
 
-    def test_legacy_dark_previews_match_committed_bytes(self) -> None:
+    def test_light_scene_transformations_are_exact_and_preserve_neutral_text(self) -> None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "site_generate_light_lines", ROOT / "scripts" / "generate.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+
+        expected_line_pairs = {
+            "sonicterm": (
+                ("apollo main", "apollo-light main"),
+                ("$ python3 scripts/check.py", "$ python3 scripts/check.py"),
+                ("palette ........ exact", "palette ........ exact"),
+                ("previews ....... 17 / 17", "previews ....... 17 / 17"),
+                ("$ _", "$ _"),
+            ),
+            "wezterm": (
+                ("$ wezterm cli list", "$ wezterm cli list"),
+                ("WIN TAB PANE TITLE", "WIN TAB PANE TITLE"),
+                ("0   0   0    theme", "0   0   0    theme"),
+                (
+                    "return { color_scheme = 'Apollo' }",
+                    "return { color_scheme = 'Apollo Light' }",
+                ),
+            ),
+            "iterm2": (
+                ("$ git status --short", "$ git status --short"),
+                (" M assets/site.css", " M assets/site.css"),
+                ("?? previews/", "?? previews/"),
+                ("Profile: Apollo", "Profile: Apollo Light"),
+            ),
+            "apple-terminal": (
+                ("Last login: Thu 20:14", "Last login: Thu 20:14"),
+                ("apollo@flight-deck % sw_vers", "apollo@flight-deck % sw_vers"),
+                ("ProductName: macOS", "ProductName: macOS"),
+                ("BuildVersion: APOLLO", "BuildVersion: APOLLO"),
+            ),
+            "alacritty": (
+                ("$ hyperfine scripts/check.py", "$ hyperfine scripts/check.py"),
+                ("Time (mean ± σ): 84.2 ms", "Time (mean ± σ): 84.2 ms"),
+                ("Range: 81.8 … 89.1 ms", "Range: 81.8 … 89.1 ms"),
+                ("$ _", "$ _"),
+            ),
+            "windows-terminal": (
+                ("PS C:\\apollo> Get-ChildItem", "PS C:\\apollo> Get-ChildItem"),
+                ("d---- previews", "d---- previews"),
+                ("d---- scripts", "d---- scripts"),
+                ("-a--- index.html", "-a--- index.html"),
+            ),
+            "firefox": (
+                ("apollo-theme.github.io", "apollo-theme.github.io"),
+                ("General", "General"),
+                ("Extensions & Themes", "Extensions & Themes"),
+                ("Enable Apollo", "Enable Apollo Light"),
+            ),
+            "vscode": (
+                ("def render_preview(app):", "def render_preview(app):"),
+                ("    palette = load_palette()", "    palette = load_light_palette()"),
+                ("    return SVG.format(", "    return SVG.format("),
+                ("        accent='#fabd2f')", "        accent='#8a5200')"),
+            ),
+            "visual-studio": (
+                ("public sealed class ThemeService", "public sealed class ThemeService"),
+                (
+                    "public string Accent => '#fabd2f';",
+                    "public string Accent => '#8a5200';",
+                ),
+                ("public bool IsDark => true;", "public bool IsDark => false;"),
+                ("Build succeeded. 0 warnings", "Build succeeded. 0 warnings"),
+            ),
+            "vim": (
+                ("set background=dark", "set background=light"),
+                ("hi Normal guifg=#cfbc97", "hi Normal guifg=#3c3836"),
+                (
+                    "let g:colors_name = 'apollo'",
+                    "let g:colors_name = 'apollo-light'",
+                ),
+                (":set cursorline", ":set cursorline"),
+            ),
+            "nvim": (
+                ("local M = {}", "local M = {}"),
+                ("M.canvas = '#141617'", "M.canvas = '#f9f5d7'"),
+                ("M.focus = '#fabd2f'", "M.focus = '#8a5200'"),
+                (
+                    "vim.api.nvim_set_hl(0, 'Normal')",
+                    "vim.api.nvim_set_hl(0, 'Normal')",
+                ),
+            ),
+            "xcode": (
+                ("struct ApolloTheme {", "struct ApolloTheme {"),
+                ("static let canvas = 0x141617", "static let canvas = 0xf9f5d7"),
+                ("static let focus = 0xfabd2f", "static let focus = 0x8a5200"),
+                ("Build Succeeded", "Build Succeeded"),
+            ),
+            "tmux": (
+                ("0:editor", "0:editor"),
+                ("1:tests", "1:tests"),
+                ("2:server", "2:server"),
+                ("[apollo] 20:14", "[apollo-light] 20:14"),
+            ),
+            "rmux": (
+                ("● apollo-site", "● apollo-site"),
+                ("3 panes · 1 active", "3 panes · 1 active"),
+                ("34 previews verified", "34 previews verified"),
+                (
+                    "Dark + Light viewport pass complete",
+                    "Dark + Light viewport pass complete",
+                ),
+            ),
+            "powershell": (
+                (
+                    "Get-ApolloPort | Where Status -eq Ready",
+                    "Get-ApolloPort | Where Status -eq Ready",
+                ),
+                ("Name          Family       Status", "Name          Family       Status"),
+                ("SonicTerm     Terminal     Ready", "SonicTerm     Terminal     Ready"),
+                ("Firefox       Browser      Ready", "Firefox       Browser      Ready"),
+            ),
+            "bat": (
+                ("118 def render_app(app):", "118 def render_app(app):"),
+                ("119     repo = app.repo", "119     repo = app.repo"),
+                ("120     return TEMPLATE.format(", "120     return TEMPLATE.format("),
+                ("121         label='SIMULATED')", "121         label='SIMULATED')"),
+            ),
+            "eza": (
+                ("drwx  544B  --  assets/", "drwx  544B  --  assets/"),
+                ("drwx  2.1k  --  palette/", "drwx  2.1k  --  palette/"),
+                ("drwx   18k   N  previews/", "drwx   18k   N  previews/"),
+                ("-rw-   42k   M  index.html", "-rw-   42k   M  index.html"),
+            ),
+        }
+        self.assertEqual(set(expected_line_pairs), set(module.SLUGS))
+        light_palette = module.load_light_palette()
+        light_lines: list[str] = []
+        for app in module.APPS:
+            pairs = expected_line_pairs[app.slug]
+            self.assertEqual(app.lines, tuple(dark for dark, _ in pairs), app.slug)
+            displayed = module.app_for_appearance(app, light_palette, "light")
+            self.assertEqual(
+                displayed.lines,
+                tuple(light for _, light in pairs),
+                app.slug,
+            )
+            self.assertEqual(displayed.tagline, app.tagline, app.slug)
+            light_lines.extend(displayed.lines)
+
+        all_light_lines = "\n".join(light_lines)
+        all_light_svgs = unescape("\n".join(
+            (ROOT / "previews" / f"{slug}-light.svg").read_text(encoding="utf-8")
+            for slug in module.SLUGS
+        ))
+        for corrupted in (
+            "Get-Apollo LightPort",
+            "struct Apollo LightTheme",
+            "apollo-light-theme.github.io",
+            "apollo-light@flight-deck",
+            "PS C:\\apollo-light>",
+            "● apollo-light-site",
+        ):
+            self.assertNotIn(corrupted, all_light_lines)
+            self.assertNotIn(corrupted, all_light_svgs)
+        for preserved in (
+            "Get-ApolloPort",
+            "struct ApolloTheme",
+            "apollo-theme.github.io",
+            "apollo@flight-deck",
+            "PS C:\\apollo>",
+            "● apollo-site",
+        ):
+            self.assertIn(preserved, all_light_lines)
+            self.assertIn(preserved, all_light_svgs)
+
+    def test_dark_compatibility_surfaces_keep_stable_names_and_native_identity(self) -> None:
+        html = (ROOT / "index.html").read_text(encoding="utf-8")
         for slug in EXPECTED_SLUGS:
-            committed = subprocess.run(
-                ["git", "show", f"HEAD:previews/{slug}.svg"],
-                cwd=ROOT,
-                check=True,
-                capture_output=True,
-            ).stdout
-            self.assertEqual((ROOT / "previews" / f"{slug}.svg").read_bytes(), committed)
+            self.assertIn(f'id="app-{slug}"', html)
+            self.assertIn(f'id="app-{slug}-dark"', html)
+            self.assertIn(f'id="app-{slug}-light"', html)
+            self.assertIn(f'src="previews/{slug}.svg"', html)
+            self.assertTrue((ROOT / "previews" / f"{slug}.svg").is_file())
+
+        dark_palette = json.loads((ROOT / "palette" / "apollo.json").read_text())
+        dark_colors = dark_palette["colors"]
+        wezterm = (ROOT / "previews" / "wezterm.svg").read_text()
+        vim = (ROOT / "previews" / "vim.svg").read_text()
+        firefox = (ROOT / "previews" / "firefox.svg").read_text()
+        self.assertIn(f'.canvas{{fill:{dark_colors["background"]}}}', wezterm)
+        self.assertIn(f'.body{{fill:{dark_colors["foreground"]};', wezterm)
+        self.assertIn("color_scheme = &#x27;Apollo&#x27;", wezterm)
+        self.assertIn("g:colors_name = &#x27;apollo&#x27;", vim)
+        self.assertIn(">Apollo Theme</text>", firefox)
+        self.assertNotIn("color_scheme = &#x27;Apollo Dark&#x27;", wezterm)
+        self.assertNotIn("g:colors_name = &#x27;apollo-dark&#x27;", vim)
+        self.assertNotIn(">Apollo Dark Theme</text>", firefox)
+
+    def test_public_copy_and_previews_name_both_appearances_explicitly(self) -> None:
+        html = (ROOT / "index.html").read_text(encoding="utf-8")
+        self.assertIn("<title>Apollo Dark + Apollo Light</title>", html)
+        self.assertIn('content="Apollo Dark and Apollo Light ', html)
+        self.assertIn('href="#palette-dark">Apollo Dark</a>', html)
+        self.assertIn('href="#palette-light">Apollo Light</a>', html)
+        self.assertIn('href="palette/apollo.json">Apollo Dark JSON</a>', html)
+        self.assertIn('href="palette/apollo-light.json">Apollo Light JSON</a>', html)
+        self.assertIn('id="palette-dark-title">Apollo Dark</h3>', html)
+        self.assertIn('id="palette-light-title">Apollo Light</h3>', html)
+
+        for slug, name, family in EXPECTED_APPS:
+            for suffix, public_name, stamp in (
+                ("", "Apollo Dark", "APOLLO DARK"),
+                ("-light", "Apollo Light", "APOLLO LIGHT"),
+            ):
+                svg = (ROOT / "previews" / f"{slug}{suffix}.svg").read_text()
+                self.assertIn(
+                    f'<title id="title">{public_name} for {name} — simulated preview</title>',
+                    svg,
+                )
+                self.assertIn(
+                    f'<desc id="desc">A clearly labeled simulated {name} interface using the {public_name} color palette.</desc>',
+                    svg,
+                )
+                self.assertIn(f'>{stamp} / {family.upper()}</text>', svg)
+
+    def test_firefox_and_rmux_copy_is_complete_and_appearance_neutral(self) -> None:
+        for filename in ("firefox.svg", "firefox-light.svg"):
+            svg = (ROOT / "previews" / filename).read_text()
+            self.assertIn(
+                "Browser chrome and web surfaces carry the same semantic signal.",
+                svg,
+            )
+            self.assertNotIn("one night palette", svg)
+        for filename in ("rmux.svg", "rmux-light.svg"):
+            svg = (ROOT / "previews" / filename).read_text()
+            self.assertIn("34 previews verified", svg)
+            self.assertIn("Dark + Light viewport pass complete", svg)
+            self.assertNotIn("Viewport pass pending", svg)
+            self.assertNotIn("17 previews verified", svg)
 
     def test_preview_styles_use_canonical_palette_roles(self) -> None:
         import importlib.util
@@ -195,6 +456,22 @@ class GeneratedSiteTests(unittest.TestCase):
         dark_style = (ROOT / "previews" / "sonicterm.svg").read_text().split("<style>", 1)[1].split("</style>", 1)[0]
         self.assertNotRegex(dark_style, r'\.dim\{fill:#928374[;}]')
 
+
+    def test_readme_presents_paired_previews_and_dark_compatibility(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "![Apollo Dark for SonicTerm simulated preview](https://raw.githubusercontent.com/apollo-theme/apollo-theme.github.io/main/previews/sonicterm.svg)",
+            readme,
+        )
+        self.assertIn(
+            "![Apollo Light for SonicTerm simulated preview](https://raw.githubusercontent.com/apollo-theme/apollo-theme.github.io/main/previews/sonicterm-light.svg)",
+            readme,
+        )
+        self.assertIn(
+            "Unsuffixed Apollo names and preview filenames remain the stable Apollo Dark compatibility surfaces",
+            readme,
+        )
+        self.assertIn("https://apollo-theme.github.io/#ports", readme)
 
     def test_site_contains_required_content_links_and_accessibility_hooks(self) -> None:
         html = (ROOT / "index.html").read_text(encoding="utf-8")

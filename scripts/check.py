@@ -8,6 +8,7 @@ import subprocess
 import sys
 import unittest
 import xml.etree.ElementTree as ET
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote_to_bytes, urlparse
@@ -17,11 +18,27 @@ EXPECTED_HASHES = {
     "apollo.json": "550f8c36cf4ef6ac99551541d1fe9554f77d563fa1e7c129a6a82583321d61ef",
     "apollo-light.json": "b0dbdeb719ed1931c424e9590562689325ecac1609e2fed6406ec5c4d3dc5763",
 }
-EXPECTED_SLUGS = (
-    "sonicterm", "wezterm", "iterm2", "apple-terminal", "alacritty",
-    "windows-terminal", "firefox", "vscode", "visual-studio", "vim",
-    "nvim", "xcode", "tmux", "rmux", "powershell", "bat", "eza",
+EXPECTED_APPS = (
+    ("sonicterm", "SonicTerm", "terminal"),
+    ("wezterm", "WezTerm", "terminal"),
+    ("iterm2", "iTerm2", "terminal"),
+    ("apple-terminal", "Apple Terminal", "terminal"),
+    ("alacritty", "Alacritty", "terminal"),
+    ("windows-terminal", "Windows Terminal", "terminal"),
+    ("firefox", "Firefox", "browser"),
+    ("vscode", "VS Code", "editor"),
+    ("visual-studio", "Visual Studio", "editor"),
+    ("vim", "Vim", "editor"),
+    ("nvim", "Neovim", "editor"),
+    ("xcode", "Xcode", "editor"),
+    ("tmux", "tmux", "multiplexer"),
+    ("rmux", "RMUX", "multiplexer"),
+    ("powershell", "PowerShell", "shell"),
+    ("bat", "bat", "utility"),
+    ("eza", "eza", "utility"),
 )
+EXPECTED_SLUGS = tuple(slug for slug, _, _ in EXPECTED_APPS)
+STALE_COPY = ("one night palette", "Viewport pass pending", "17 previews verified")
 
 
 class SiteParser(HTMLParser):
@@ -135,19 +152,50 @@ def check_html() -> None:
             fail(f"protocol-relative link: {link}")
         if link.startswith("#") and link[1:] not in known_ids:
             fail(f"broken fragment: {link}")
-    expected_sources = [
-        source
-        for slug in EXPECTED_SLUGS
-        for source in (f"previews/{slug}.svg", f"previews/{slug}-light.svg")
+    expected_previews = [
+        (f"previews/{slug}.svg", f"Simulated {name} interface using Apollo Dark colors")
+        for slug, name, _ in EXPECTED_APPS
     ]
+    expected_lights = [
+        (f"previews/{slug}-light.svg", f"Simulated {name} interface using Apollo Light colors")
+        for slug, name, _ in EXPECTED_APPS
+    ]
+    expected_images = [item for pair in zip(expected_previews, expected_lights, strict=True) for item in pair]
     if len(parser.images) != 34:
         fail(f"expected 34 preview images, found {len(parser.images)}")
-    for source, image in zip(expected_sources, parser.images, strict=True):
-        if not image.get("alt") or image.get("width") != "1200" or image.get("height") != "630":
-            fail(f"preview lacks alt or exact dimensions: {image}")
+    for (source, alt), image in zip(expected_images, parser.images, strict=True):
+        if image.get("alt") != alt or image.get("width") != "1200" or image.get("height") != "630":
+            fail(f"preview lacks appearance-specific alt or exact dimensions: {image}")
         found = str(image.get("src", ""))
         if found != source:
             fail(f"preview source order differs: expected {source}, got {found}")
+    for slug, name, _ in EXPECTED_APPS:
+        for appearance in ("Dark", "Light"):
+            label = f'aria-label="Link to {name} Apollo {appearance} appearance"'
+            if label not in text:
+                fail(f"missing appearance-specific preview label: {label}")
+    if text.count(">Apollo Dark</span>") != 17 or text.count(">Apollo Light</span>") != 17:
+        fail("expected exactly 17 visible Apollo Dark and 17 Apollo Light labels")
+    if text.count("SIMULATED PREVIEW · illustrative Apollo Dark interface, not an application screenshot.") != 17:
+        fail("expected exactly 17 Apollo Dark descriptive captions")
+    if text.count("SIMULATED PREVIEW · illustrative Apollo Light interface, not an application screenshot.") != 17:
+        fail("expected exactly 17 Apollo Light descriptive captions")
+    required_public_copy = (
+        "<title>Apollo Dark + Apollo Light</title>",
+        'content="Apollo Dark and Apollo Light ',
+        'href="#palette-dark">Apollo Dark</a>',
+        'href="#palette-light">Apollo Light</a>',
+        'href="palette/apollo.json">Apollo Dark JSON</a>',
+        'href="palette/apollo-light.json">Apollo Light JSON</a>',
+        'id="palette-dark-title">Apollo Dark</h3>',
+        'id="palette-light-title">Apollo Light</h3>',
+    )
+    for value in required_public_copy:
+        if value not in text:
+            fail(f"missing appearance-specific public copy: {value}")
+    for stale in STALE_COPY:
+        if stale in text:
+            fail(f"stale public copy in index.html: {stale}")
     if re.search(r"<(script|iframe)\b", text, re.I):
         fail("site must not require scripts or iframes")
     favicon = re.search(r'<link rel="icon" href="([^"]+)">', text)
@@ -202,11 +250,75 @@ def check_svgs() -> None:
         layouts.add(match.group(1))
         if 'data-layout=' in text:
             fail(f"invalid SVG data-layout attribute: {path.name}")
-        if appearance == "light" and "Apollo Light" not in text:
-            fail(f"light preview lacks variant identity: {path.name}")
+        slug = path.stem.removesuffix("-light")
+        app = next((item for item in EXPECTED_APPS if item[0] == slug), None)
+        if app is None:
+            fail(f"unknown preview app: {path.name}")
+        _, name, family = app
+        public_name = "Apollo Light" if appearance == "light" else "Apollo Dark"
+        public_stamp = "APOLLO LIGHT" if appearance == "light" else "APOLLO DARK"
+        if f'<title id="title">{public_name} for {name} — simulated preview</title>' not in text:
+            fail(f"preview lacks appearance-specific title: {path.name}")
+        if f'<desc id="desc">A clearly labeled simulated {name} interface using the {public_name} color palette.</desc>' not in text:
+            fail(f"preview lacks appearance-specific description: {path.name}")
+        if f'>{public_stamp} / {family.upper()}</text>' not in text:
+            fail(f"preview lacks appearance-specific top stamp: {path.name}")
+        for stale in STALE_COPY:
+            if stale in text:
+                fail(f"stale public copy in {path.name}: {stale}")
+    light_text = unescape("\n".join(
+        (ROOT / "previews" / f"{slug}-light.svg").read_text(encoding="utf-8")
+        for slug in EXPECTED_SLUGS
+    ))
+    for corrupted in (
+        "Get-Apollo LightPort",
+        "struct Apollo LightTheme",
+        "apollo-light-theme.github.io",
+        "apollo-light@flight-deck",
+        "PS C:\\apollo-light>",
+        "● apollo-light-site",
+    ):
+        if corrupted in light_text:
+            fail(f"light previews corrupt neutral identifier: {corrupted}")
+    for preserved in (
+        "Get-ApolloPort",
+        "struct ApolloTheme",
+        "apollo-theme.github.io",
+        "apollo@flight-deck",
+        "PS C:\\apollo>",
+        "● apollo-site",
+    ):
+        if preserved not in light_text:
+            fail(f"light previews lost neutral identifier: {preserved}")
+    wezterm = (ROOT / "previews" / "wezterm.svg").read_text(encoding="utf-8")
+    vim = (ROOT / "previews" / "vim.svg").read_text(encoding="utf-8")
+    firefox = (ROOT / "previews" / "firefox.svg").read_text(encoding="utf-8")
+    if "color_scheme = &#x27;Apollo&#x27;" not in wezterm:
+        fail("dark WezTerm preview lost native Apollo identity")
+    if "g:colors_name = &#x27;apollo&#x27;" not in vim:
+        fail("dark Vim preview lost native apollo identity")
+    if ">Apollo Theme</text>" not in firefox:
+        fail("dark Firefox preview lost official Apollo Theme identity")
     if len(layouts) < 8:
         fail(f"previews need at least 8 meaningful layouts, found {len(layouts)}")
     print(f"svg: 34 safe simulations across {len(layouts)} layouts with exact variant styles")
+
+
+def check_readme() -> None:
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    required = (
+        "![Apollo Dark for SonicTerm simulated preview](https://raw.githubusercontent.com/apollo-theme/apollo-theme.github.io/main/previews/sonicterm.svg)",
+        "![Apollo Light for SonicTerm simulated preview](https://raw.githubusercontent.com/apollo-theme/apollo-theme.github.io/main/previews/sonicterm-light.svg)",
+        "Unsuffixed Apollo names and preview filenames remain the stable Apollo Dark compatibility surfaces",
+        "https://apollo-theme.github.io/#ports",
+    )
+    for value in required:
+        if value not in text:
+            fail(f"README lacks required public copy: {value}")
+    for stale in STALE_COPY:
+        if stale in text:
+            fail(f"stale public copy in README.md: {stale}")
+    print("readme: paired appearances, compatibility, and direct ports link verified")
 
 
 def check_generated() -> None:
@@ -224,7 +336,7 @@ def run_tests() -> None:
 
 
 def main() -> int:
-    checks = (check_palette, check_html, check_svgs, check_generated, run_tests)
+    checks = (check_palette, check_html, check_svgs, check_readme, check_generated, run_tests)
     try:
         for check in checks:
             check()

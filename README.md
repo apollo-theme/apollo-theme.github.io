@@ -1,8 +1,12 @@
 # Apollo Theme website
 
-The organization-root GitHub Pages site for [Apollo Theme](https://github.com/apollo-theme/apollo-theme). It presents the canonical Apollo and Apollo Light palettes across 17 permanent application ports through clearly labeled simulated interfaces.
+The organization-root GitHub Pages site for [Apollo Theme](https://github.com/apollo-theme/apollo-theme). It presents the canonical Apollo Dark and Apollo Light palettes across 17 permanent application ports through clearly labeled simulated interfaces. [Explore all ports](https://apollo-theme.github.io/#ports).
 
-![Apollo for SonicTerm simulated preview](https://raw.githubusercontent.com/apollo-theme/apollo-theme.github.io/main/previews/sonicterm.svg)
+![Apollo Dark for SonicTerm simulated preview](https://raw.githubusercontent.com/apollo-theme/apollo-theme.github.io/main/previews/sonicterm.svg)
+
+![Apollo Light for SonicTerm simulated preview](https://raw.githubusercontent.com/apollo-theme/apollo-theme.github.io/main/previews/sonicterm-light.svg)
+
+Unsuffixed Apollo names and preview filenames remain the stable Apollo Dark compatibility surfaces: native integrations continue to use established names such as `Apollo`, `apollo`, and Firefox’s `Apollo Theme`, while public appearance labels distinguish Apollo Dark from Apollo Light.
 
 ## Architecture
 
